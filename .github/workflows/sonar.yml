@@ -1,0 +1,85 @@
+name: SAST - SonarCloud
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  check_secret:
+    name: Check secret presence
+    runs-on: ubuntu-latest
+    steps:
+    - run: if [[ -z "$SONAR_TOKEN" ]]; then exit 1; else echo "Secret exists. The workflow will be continued"; fi
+    env:
+       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  
+  P_WD_analysis:
+    name: SAST - SonarCloud - Push/WD analysis
+    needs: check_secret
+    runs-on: ubuntu-latest
+    if: (github.event_name == 'push'|| github.event_name == 'workflow_dispatch')
+    steps:
+      - name: Checkout action
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+      - name: setup projectkey
+        run: echo "PROJECTKEY=${{ github.repository_owner}}_$(echo ${{ github.repository }} | sed 's/.*\///')" >> $GITHUB_ENV
+      - name: SonarCloud Scan - Action
+        uses: SonarSource/sonarcloud-github-action@master
+        with:
+            args: >
+                -Dsonar.organization=${{ github.repository_owner }}
+                -Dsonar.projectKey=${{ env.PROJECTKEY }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}  # Needed to get PR information, if any
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  post_to_dojo:
+    runs-on: ubuntu-latest
+    steps:
+
+     - name: Use Node.js 
+       uses: actions/setup-node@v2
+       with:
+        node-version: 20.11.0
+        cache: 'npm'
+     - name: Cache npm dependencies
+       uses: actions/cache@v3
+       with:
+        path: ~/.npm
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-
+
+     - name: Install Dependencies (sonar-report) and run it
+       run: |
+         npm install -g sonar-report
+         sonar-report \
+           --sonarurl="https://sonarcloud.io" \
+           --sonarorganization="${{ github.repository_owner}}" \
+           --branch="master" \
+           --sonartoken="${{ secrets.SONAR_TOKEN }}" \
+           --output sonarreport.html \
+           --application="iGoat" \
+           --save-report-json="report.json" \
+           --sonarcomponent="TestingOrgCS_iGoat-Swift"
+       env:
+         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+     - name: run dojo POST
+       run: |
+          curl -s https://raw.githubusercontent.com/Tech-it-or-live-it-Secure-CICD/centralWorkflows/main/engagementIDs.json > test.json
+          export "ID=$(jq '."${{ github.repository }}".${{ github.ref_name }}.depcheckID' test.json)" >> GITHUB_ENV
+          echo "$ID test"
+          echo -n '${{ secrets.DOJO_TOKEN }}' | base64
+          echo -n "curl -X POST "https://demo.defectdojo.org/api/v2/import-scan/" -H "Authorization: Token $DOJO_TOKEN" " | base64
+          curl -X POST "https://demo.defectdojo.org/api/v2/import-scan/" \
+                            -H "Authorization: Token $DOJO_TOKEN" \
+                            -F "engagement=18" \
+                            -F "active=true" \
+                            -F "scan_type=SonarQube Scan detailed \
+                            -F "minimum_severity=Info" \
+                            -F "skip_duplicates=true" \
+                            -F "close_old_findings=true" \
+                            -F "file=/src/sonarreport.html" 
+       env:
+         DOJO_TOKEN: ${{ secrets.DOJO_TOKEN }}
