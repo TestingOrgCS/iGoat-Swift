@@ -1,0 +1,60 @@
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+  
+jobs:
+
+  retrieve_depcheckID:
+   runs-on: ubuntu-latest
+   steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: install depcheck cli
+        run: |
+          mkdir dc && cd dc
+          wget https://github.com/jeremylong/DependencyCheck/releases/download/v9.0.9/dependency-check-9.0.9-release.zip
+          ls
+          unzip dependency-check-9.0.9-release.zip
+          bash ./dependency-check/bin/dependency-check.sh -h
+          ls -lah
+      - name: Depcheck Action - SCA
+        uses: dependency-check/Dependency-Check_Action@main
+        id: Depcheck
+        with:
+          project: '${{ github.repository }}'
+          path: '.'
+          format: 'HTML'
+          out: 'reports' # this is the default, no need to specify unless you wish to override it
+          args: >
+            --enableRetired
+            --enableExperimental
+            --nvdApiKey $NVD_API_KEY
+        env: 
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+      - name: Upload results - SCA
+        uses: actions/upload-artifact@master
+        with:
+           name: Depcheck report
+           path: ${{github.workspace}}/reports
+      - name: run dojo POST
+        if: (false)
+        run: |
+          curl -s https://raw.githubusercontent.com/Tech-it-or-live-it-Secure-CICD/centralWorkflows/main/engagementIDs.json > test.json
+          export "ID=$(jq '."${{ github.repository }}".${{ github.ref_name }}.depcheckID' test.json)" >> GITHUB_ENV
+          echo "$ID test"
+          echo -n '${{ secrets.DOJO_TOKEN }}' | base64
+          echo -n "curl -X POST "https://dojo.cloud.qweqwe/api/v2/import-scan/" -H "Authorization: Token $DOJO_TOKEN" " | base64
+          curl -X POST "https://dojo.cloud.qweqwe/api/v2/import-scan/" \
+                            -H "Authorization: Token $DOJO_TOKEN" \
+                            -F "engagement=$ID" \
+                            -F "active=true" \
+                            -F "scan_type=Gitleaks Scan" \
+                            -F "minimum_severity=Info" \
+                            -F "skip_duplicates=true" \
+                            -F "close_old_findings=true" \
+                            -F "file=/src/gitleaks-report.json" 
+        env:
+         DOJO_TOKEN: ${{ secrets.DOJO_TOKEN }}
