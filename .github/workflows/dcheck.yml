@@ -17,7 +17,7 @@ jobs:
       - name: Cache Dependency Check Data
         uses: actions/cache@v4
         with:
-          path: dc/dependency-check/data
+          path: dependency-check/data
           key: dependency-check-data-${{ runner.os }}
           restore-keys: |
             dependency-check-data-
@@ -26,18 +26,19 @@ jobs:
       - name: Cache Dependency Check CLI
         uses: actions/cache@v4
         with:
-          path: dc/dependency-check
+          path: dependency-check
           key: dependency-check-cli-9.0.9
           restore-keys: |
             dependency-check-cli-
       - name: install depcheck cli
         run: |
-          mkdir dc
-          wget -P dc https://github.com/jeremylong/DependencyCheck/releases/download/v9.0.9/dependency-check-9.0.9-release.zip
-          ls
-          unzip dc/dependency-check-9.0.9-release.zip -d dc
-          bash ./dc/dependency-check/bin/dependency-check.sh --enableExperimental --enableRetired --nvdApiKey $NVD_API_KEY -s . -f HTML -o reports
-          ls -lah
+          if [[ -f "dependency-check/bin/dependency-check.sh" ]]; then
+             bash dependency-check/bin/dependency-check.sh --enableExperimental --enableRetired --nvdApiKey $NVD_API_KEY -s . -f HTML -o reports --project ${{ github.repository }}
+          else
+             wget https://github.com/jeremylong/DependencyCheck/releases/download/v9.0.9/dependency-check-9.0.9-release.zip
+             unzip dependency-check-9.0.9-release.zip
+             bash dependency-check/bin/dependency-check.sh --enableExperimental --enableRetired --nvdApiKey $NVD_API_KEY -s . -f HTML -o reports --project ${{ github.repository }}
+          fi
           ls -lah reports
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
