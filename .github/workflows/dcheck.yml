@@ -14,26 +14,15 @@ jobs:
           fetch-depth: 0
       - name: install depcheck cli
         run: |
-          mkdir dc && cd dc
-          wget https://github.com/jeremylong/DependencyCheck/releases/download/v9.0.9/dependency-check-9.0.9-release.zip
+          mkdir dc
+          wget -P dc https://github.com/jeremylong/DependencyCheck/releases/download/v9.0.9/dependency-check-9.0.9-release.zip
           ls
-          unzip dependency-check-9.0.9-release.zip
-          bash ./dependency-check/bin/dependency-check.sh -h
+          unzip dc/dependency-check-9.0.9-release.zip -d dc
+          bash ./dc/dependency-check/bin/dependency-check.sh --enableExperimental --enableRetired $NVD_API_KEY -s . -f HTML -o reports
           ls -lah
-      - name: Depcheck Action - SCA
-        uses: dependency-check/Dependency-Check_Action@main
-        id: Depcheck
-        with:
-          project: '${{ github.repository }}'
-          path: '.'
-          format: 'HTML'
-          out: 'reports' # this is the default, no need to specify unless you wish to override it
-          args: >
-            --enableRetired
-            --enableExperimental
-            --nvdApiKey $NVD_API_KEY
-        env: 
+        env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+
       - name: Upload results - SCA
         uses: actions/upload-artifact@master
         with:
