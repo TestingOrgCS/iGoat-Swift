@@ -1,4 +1,4 @@
-name: SAST - SonarCloud
+name: CALLER SONAR
 on:
   push:
   pull_request_target:
